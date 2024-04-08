@@ -28,4 +28,4 @@ Install with the package manager of your choice:
 
 ## :warning: Notice
 
-This project is still in the early stages of development. Please use it on your own risk.
+This project is forked from [nvim-extensions](https://github.com/nvim-extensions/nvim-ginkgo) which was still in the early stages of development. Please use at your own risk.
