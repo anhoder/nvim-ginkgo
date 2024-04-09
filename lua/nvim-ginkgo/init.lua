@@ -64,25 +64,18 @@ end
 ---@param args neotest.RunArgs
 ---@return nil | neotest.RunSpec | neotest.RunSpec[]
 function adapter.build_spec(args)
-	local report_filename = "suite_test.json"
+	local report_path = async.fn.tempname()
 	local cargs = {}
 
 	table.insert(cargs, "ginkgo")
 	table.insert(cargs, "run")
 	table.insert(cargs, "-v")
-	-- TODO: we should pass the tags in any case
-	-- table.insert(cargs, utils.get_build_tags())
-	table.insert(cargs, "--cover")
-	local position = args.tree:data()
-	if vim.fn.isdirectory(position.path) ~= 1 then
-		table.insert(cargs, "--keep-separate-reports")
-	end
-
 	table.insert(cargs, "--keep-going")
 	table.insert(cargs, "--json-report")
-	table.insert(cargs, report_filename)
+	table.insert(cargs, report_path)
 
 	-- prepare the focus
+	local position = args.tree:data()
 	if position.type == "test" or position.type == "namespace" then
 		-- pos.id in form "path/to/file::Describe text::test text"
 		local name = string.sub(position.id, string.find(position.id, "::") + 2)
@@ -112,8 +105,6 @@ function adapter.build_spec(args)
 	end
 
 	table.insert(cargs, directory .. plenary.path.sep .. "...")
-	-- report the results path
-	local report_path = directory .. plenary.path.sep .. report_filename
 
 	return {
 		command = table.concat(cargs, " "),
