@@ -19,6 +19,16 @@ function utils.create_location_id(spec)
 	return id
 end
 
+function utils.get_dap_config()
+	return {
+		type = "go",
+		name = "Neotest Debugger",
+		request = "launch",
+		mode = "test",
+		program = "./${relativeFileDirname}",
+	}
+end
+
 ---@return string
 function utils.create_location_path(spec)
 	return spec.FileName .. ":" .. spec.LineNumber

@@ -40,31 +40,69 @@ end
 ---Given a file path, parse all the tests within it.
 ---@async
 ---@param file_path string Absolute file path
+---@diagnostic disable-next-line: undefined-doc-name
 ---@return neotest.Tree | nil
 function adapter.discover_positions(file_path)
 	local query = [[
     ; -- Namespaces --
-    ; Matches: `describe('subject')` and `context('case')`
+    ; Matches: `Describe('subject')` and `Context('case')` and `When('case')`
     ((call_expression
-      function: (identifier) @func_name (#any-of? @func_name "Describe" "Context")
+      function: (identifier) @func.name (#any-of? @func.name "Describe" "Context" "When" "DescribeTable")
       arguments: (argument_list ((interpreted_string_literal) @namespace.name))
     )) @namespace.definition
 
     ; -- Tests --
-    ; Matches: `it('test')`
+    ; Matches: `It('test')`
     ((call_expression
-      function: (identifier) @func_name (#eq? @func_name "It")
+      function: (identifier) @func.name (#any-of? @func.name "It" "Entry")
       arguments: (argument_list ((interpreted_string_literal) @test.name))
     )) @test.definition
   ]]
 
-	return lib.treesitter.parse_positions(file_path, query, { nested_namespaces = true, require_namespaces = true })
+	return lib.treesitter.parse_positions(file_path, query, {
+		nested_namespaces = true,
+		require_namespaces = true,
+		build_position = function(fpath, source, captured_nodes)
+			local match_type
+			if captured_nodes["test.name"] then
+				match_type = "test"
+			end
+			if captured_nodes["namespace.name"] then
+				match_type = "namespace"
+			end
+			if not match_type then
+				return
+			end
+
+			---@type string
+			local name = vim.treesitter.get_node_text(captured_nodes[match_type .. ".name"], source)
+			local definition = captured_nodes[match_type .. ".definition"]
+
+			if captured_nodes["func.name"] then
+				local func_name = vim.treesitter.get_node_text(captured_nodes["func.name"], source)
+				if func_name == "When" then
+					name = '"when ' .. string.sub(name, string.find(name, '"') + 1)
+				end
+			end
+
+			return {
+				type = match_type,
+				path = fpath,
+				name = name,
+				range = { definition:range() },
+			}
+		end,
+	})
 end
 
+---@diagnostic disable-next-line: undefined-doc-name
 ---@param args neotest.RunArgs
+---@diagnostic disable-next-line: undefined-doc-name
 ---@return nil | neotest.RunSpec | neotest.RunSpec[]
 function adapter.build_spec(args)
 	local report_path = async.fn.tempname()
+	---@diagnostic disable-next-line: undefined-field
+	local strategy = args.strategy
 	local cargs = {}
 
 	table.insert(cargs, "ginkgo")
@@ -75,6 +113,7 @@ function adapter.build_spec(args)
 	table.insert(cargs, report_path)
 
 	-- prepare the focus
+	---@diagnostic disable-next-line: undefined-field
 	local position = args.tree:data()
 	if position.type == "test" or position.type == "namespace" then
 		-- pos.id in form "path/to/file::Describe text::test text"
@@ -82,8 +121,7 @@ function adapter.build_spec(args)
 		name, _ = string.gsub(name, "::", " ")
 		name, _ = string.gsub(name, '"', "")
 		-- prepare the pattern
-		-- https://github.com/onsi/ginkgo/issues/1126#issuecomment-1409245937
-		local pattern = "'\\b" .. name .. "\\b'"
+		local pattern = '"' .. name .. '"'
 		-- prepare tha arguments
 		table.insert(cargs, "--focus")
 		table.insert(cargs, pattern)
@@ -98,6 +136,7 @@ function adapter.build_spec(args)
 		directory = vim.fn.fnamemodify(position.path, ":h")
 	end
 
+	---@diagnostic disable-next-line: undefined-field
 	local extra_args = args.extra_args or {}
 	-- merge the argument
 	for _, value in ipairs(extra_args) do
@@ -106,7 +145,9 @@ function adapter.build_spec(args)
 
 	table.insert(cargs, directory .. plenary.path.sep .. "...")
 
-	return {
+	-- vim.notify(table.concat(cargs, " "))
+
+	local return_result = {
 		command = table.concat(cargs, " "),
 		context = {
 			-- input
@@ -116,15 +157,26 @@ function adapter.build_spec(args)
 			report_output_path = report_path,
 		},
 	}
+
+	if strategy == "dap" then
+		return_result.strategy = utils.get_dap_config()
+	end
+
+	return return_result
 end
 
 ---@async
+---@diagnostic disable-next-line: undefined-doc-name
 ---@param spec neotest.RunSpec
+---@diagnostic disable-next-line: undefined-doc-name
 ---@param result neotest.StrategyResult
+---@diagnostic disable-next-line: undefined-doc-name
 ---@param tree neotest.Tree
+---@diagnostic disable-next-line: undefined-doc-name
 ---@return table<string, neotest.Result>
 function adapter.results(spec, result, tree)
 	local collection = {}
+	---@diagnostic disable-next-line: undefined-field
 	local report_path = spec.context.report_output_path
 
 	local fok, report_data = pcall(lib.files.read, report_path)
@@ -171,6 +223,10 @@ function adapter.results(spec, result, tree)
 					spec_item_node.status = spec_item.State
 				end
 
+				if spec_item_node.status == "skipped" then
+					goto continue
+				end
+
 				-- set the node errors
 				if spec_item.Failure ~= nil then
 					spec_item_node.errors = {}
@@ -194,6 +250,7 @@ function adapter.results(spec, result, tree)
 				local spec_item_node_id = utils.create_location_id(spec_item)
 				collection[spec_item_node_id] = spec_item_node
 			end
+			::continue::
 		end
 	end
 
