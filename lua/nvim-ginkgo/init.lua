@@ -110,7 +110,9 @@ function adapter.build_spec(args)
 	table.insert(cargs, "-v")
 	table.insert(cargs, "--keep-going")
 	table.insert(cargs, "--json-report")
-	table.insert(cargs, report_path)
+	table.insert(cargs, vim.fn.fnamemodify(report_path, ":t"))
+	table.insert(cargs, "--output-dir")
+	table.insert(cargs, vim.fn.fnamemodify(report_path, ":h"))
 
 	-- prepare the focus
 	---@diagnostic disable-next-line: undefined-field
