@@ -107,8 +107,7 @@ function adapter.build_spec(args)
 
 	table.insert(cargs, "ginkgo")
 	table.insert(cargs, "run")
-	table.insert(cargs, "-v")
-	table.insert(cargs, "--keep-going")
+	vim.list_extend(cargs, adapter._ginkgo_args)
 	table.insert(cargs, "--json-report")
 	table.insert(cargs, vim.fn.fnamemodify(report_path, ":t"))
 	table.insert(cargs, "--output-dir")
@@ -257,6 +256,20 @@ function adapter.results(spec, result, tree)
 	end
 
 	return collection
+end
+
+adapter._ginkgo_args = {
+	"-v",
+	"--keep-going",
+}
+
+adapter.setup = function(opts)
+	opts = opts or {}
+	if opts.ginkgo_args then
+		adapter._ginkgo_args = opts.ginkgo_args
+	end
+
+	return adapter
 end
 
 --the adatper
